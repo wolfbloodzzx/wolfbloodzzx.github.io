@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<meta name="theme-color" content="#222"><meta name="generator" content="Hexo 6.2.0">
+
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16.png">
+  <link rel="mask-icon" href="/images/safari-pinned-tab.svg" color="#222">
+  <link rel="manifest" href="/images/site.webmanifest">
+
+<link rel="stylesheet" href="/css/main.css">
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&display=swap&subset=latin,latin-ext">
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.1.1/css/all.min.css" integrity="sha256-DfWjNxDkM94fVBWx1H5BMMp0Zq7luBlV8QRcSES7s+0=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css" integrity="sha256-PR7ttpcvz8qrF57fur/yAx1qXMFJeJFiA6pSzWi0OIE=" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.5.7/dist/jquery.fancybox.min.css" integrity="sha256-Vzbj7sDDS/woiFS3uNKo8eIuni59rjyNGtXfstRzStA=" crossorigin="anonymous">
+
+<script class="next-config" data-name="main" type="application/json">{"hostname":"blog.zevzhang.top","root":"/","images":"/images","scheme":"Muse","darkmode":false,"version":"8.12.2","exturl":false,"sidebar":{"position":"left","display":"always","padding":18,"offset":12},"copycode":{"enable":false,"style":null},"bookmark":{"enable":false,"color":"#222","save":"auto"},"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"buttons","active":"valine","storage":true,"lazyload":false,"nav":null,"activeClass":"valine"},"stickytabs":false,"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"i18n":{"placeholder":"搜索...","empty":"没有找到任何搜索结果：${query}","hits_time":"找到 ${hits} 个搜索结果（用时 ${time} 毫秒）","hits":"找到 ${hits} 个搜索结果"},"path":"/search.xml","localsearch":{"enable":true,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false}}</script><script src="/js/config.js"></script>
+
+    <meta name="description" content="c++11中引入的移动语义和std::move函数，是一个非常容易让人疑惑的点。正好最近在开发中遇到了几个std::move使用不当造成的bug，网上关于移动语义的资料很多，正好借着这个机会，按照我的理解好好盘一盘c++11里的移动语义到底做了一件什么事儿。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="聊聊c++中的移动语义">
+<meta property="og:url" content="http://blog.zevzhang.top/2022/10/10/%E8%81%8A%E8%81%8Ac%E4%B8%AD%E7%9A%84%E7%A7%BB%E5%8A%A8%E8%AF%AD%E4%B9%89/index.html">
+<meta property="og:site_name" content="小张同学的日常扯淡记录">
+<meta property="og:description" content="c++11中引入的移动语义和std::move函数，是一个非常容易让人疑惑的点。正好最近在开发中遇到了几个std::move使用不当造成的bug，网上关于移动语义的资料很多，正好借着这个机会，按照我的理解好好盘一盘c++11里的移动语义到底做了一件什么事儿。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2022-10-10T03:19:48.000Z">
+<meta property="article:modified_time" content="2022-10-10T03:19:48.000Z">
+<meta property="article:author" content="张子兴">
+<meta property="article:tag" content="c++">
+<meta property="article:tag" content="编程">
+<meta name="twitter:card" content="summary">
+
+
+<link rel="canonical" href="http://blog.zevzhang.top/2022/10/10/%E8%81%8A%E8%81%8Ac%E4%B8%AD%E7%9A%84%E7%A7%BB%E5%8A%A8%E8%AF%AD%E4%B9%89/">
+
+
+
+<script class="next-config" data-name="page" type="application/json">{"sidebar":"","isHome":false,"isPost":true,"lang":"zh-CN","comments":true,"permalink":"http://blog.zevzhang.top/2022/10/10/%E8%81%8A%E8%81%8Ac%E4%B8%AD%E7%9A%84%E7%A7%BB%E5%8A%A8%E8%AF%AD%E4%B9%89/","path":"2022/10/10/聊聊c中的移动语义/","title":"聊聊c++中的移动语义"}</script>
+
+<script class="next-config" data-name="calendar" type="application/json">""</script>
+<title>聊聊c++中的移动语义 | 小张同学的日常扯淡记录</title>
+  
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-Z7FBSG9JT0"></script>
+  <script class="next-config" data-name="google_analytics" type="application/json">{"tracking_id":"G-Z7FBSG9JT0","only_pageview":false}</script>
+  <script src="/js/third-party/analytics/google-analytics.js"></script>
+
+  <script src="/js/third-party/analytics/baidu-analytics.js"></script>
+  <script async src="https://hm.baidu.com/hm.js?79e58bf21643872de0733a5361291a0e"></script>
+
+
+
+
+  <noscript>
+    <link rel="stylesheet" href="/css/noscript.css">
+  </noscript>
+<link rel="alternate" href="/atom.xml" title="小张同学的日常扯淡记录" type="application/atom+xml">
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏" role="button">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <p class="site-title">小张同学的日常扯淡记录</p>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">大道至简，知易行难</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu"><li class="menu-item menu-item-home"><a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a></li><li class="menu-item menu-item-tags"><a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签<span class="badge">5</span></a></li><li class="menu-item menu-item-categories"><a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类<span class="badge">2</span></a></li><li class="menu-item menu-item-archives"><a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档<span class="badge">3</span></a></li><li class="menu-item menu-item-札记"><a href="/essay/" rel="section"><i class="fa fa-book fa-fw"></i>札记</a></li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup"><div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off" maxlength="80"
+           placeholder="搜索..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close" role="button">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div class="search-result-container no-result">
+  <div class="search-result-icon">
+    <i class="fa fa-spinner fa-pulse fa-5x"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+        
+  
+  <div class="toggle sidebar-toggle" role="button">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <div class="sidebar-panel-container">
+        <!--noindex-->
+        <div class="post-toc-wrap sidebar-panel">
+            <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%89%80%E8%B0%93%E7%9A%84%E8%B5%8B%E5%80%BC%E8%AF%AD%E5%8F%A5%E5%88%B0%E5%BA%95%E5%81%9A%E4%BA%86%E4%B8%80%E4%BB%B6%E4%BB%80%E4%B9%88%E4%BA%8B%E5%84%BF"><span class="nav-number">1.</span> <span class="nav-text">所谓的赋值语句，到底做了一件什么事儿</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%8B%B7%E8%B4%9D%E8%B5%8B%E5%80%BC%E4%B8%8E%E7%A7%BB%E5%8A%A8%E8%B5%8B%E5%80%BC"><span class="nav-number">2.</span> <span class="nav-text">拷贝赋值与移动赋值</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%8B%B7%E8%B4%9D%E6%9E%84%E9%80%A0%E4%B8%8E%E7%A7%BB%E5%8A%A8%E6%9E%84%E9%80%A0"><span class="nav-number">3.</span> <span class="nav-text">拷贝构造与移动构造</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%80%BB%E7%BB%93"><span class="nav-number">4.</span> <span class="nav-text">总结</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9B%9E%E8%BF%87%E5%A4%B4%E8%AF%B4%E4%B8%80%E5%98%B4stdmove"><span class="nav-number">5.</span> <span class="nav-text">回过头说一嘴std::move</span></a></li></ol></div>
+        </div>
+        <!--/noindex-->
+
+        <div class="site-overview-wrap sidebar-panel">
+          <div class="site-author site-overview-item animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="张子兴"
+      src="/images/avatar_old.jpeg">
+  <p class="site-author-name" itemprop="name">张子兴</p>
+  <div class="site-description" itemprop="description">扯淡为主，瞎掰为辅</div>
+</div>
+<div class="site-state-wrap site-overview-item animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+        <a href="/archives/">
+          <span class="site-state-item-count">3</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+          <a href="/categories/">
+        <span class="site-state-item-count">2</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+          <a href="/tags/">
+        <span class="site-state-item-count">5</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author site-overview-item animated">
+      <span class="links-of-author-item">
+        <a href="https://www.zhihu.com/people/zhang-zi-xing-31" title="ZhiHu → https:&#x2F;&#x2F;www.zhihu.com&#x2F;people&#x2F;zhang-zi-xing-31" rel="noopener" target="_blank"><i class="fab fa-zhihu fa-fw"></i></a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="https://github.com/wolfbloodzzx" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;wolfbloodzzx" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i></a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="https://instagram.com/wolfbloodzzx" title="Instagram → https:&#x2F;&#x2F;instagram.com&#x2F;wolfbloodzzx" rel="noopener" target="_blank"><i class="fab fa-instagram fa-fw"></i></a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="mailto:zhangzi_xing@hotmail.com" title="E-Mail → mailto:zhangzi_xing@hotmail.com" rel="noopener" target="_blank"><i class="fa fa-envelope fa-fw"></i></a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="/atom.xml" title="RSS → &#x2F;atom.xml"><i class="fa fa-rss fa-fw"></i></a>
+      </span>
+  </div>
+  <div class="cc-license site-overview-item animated" itemprop="license">
+    <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh" class="cc-opacity" rel="noopener" target="_blank"><img src="https://cdn.jsdelivr.net/npm/@creativecommons/vocabulary@2020.11.3/assets/license_badges/small/by_nc_sa.svg" alt="Creative Commons"></a>
+  </div>
+
+
+
+  <div class="links-of-recent-posts motion-element">
+    <div class="links-of-recent-posts-title">
+      <i class="fa fa-history fa-fw"></i>
+      最近文章
+    </div>
+    <ul class="links-of-recent-posts-list">
+        <li class="links-of-recent-posts-item">
+          <a href="/2022/10/10/%E8%81%8A%E8%81%8Ac%E4%B8%AD%E7%9A%84%E7%A7%BB%E5%8A%A8%E8%AF%AD%E4%B9%89/" title="2022&#x2F;10&#x2F;10&#x2F;聊聊c中的移动语义&#x2F;">聊聊c++中的移动语义</a>
+        </li>
+        <li class="links-of-recent-posts-item">
+          <a href="/2022/02/20/2021%E5%B9%B4%E9%82%A3%E4%BA%9B%E8%AE%A9%E6%88%91%E5%8D%B0%E8%B1%A1%E6%B7%B1%E5%88%BB%E7%9A%84%E6%92%AD%E5%AE%A2%E8%8A%82%E7%9B%AE%E7%9B%98%E7%82%B9/" title="2022&#x2F;02&#x2F;20&#x2F;2021年那些让我印象深刻的播客节目盘点&#x2F;">2021年那些印象深刻的播客节目</a>
+        </li>
+        <li class="links-of-recent-posts-item">
+          <a href="/2021/12/31/%E5%9C%A8%E5%90%8E%E5%8E%82%E7%9A%84%E4%BA%8C%E4%B8%89%E4%BA%8B%E5%84%BF/" title="2021&#x2F;12&#x2F;31&#x2F;在后厂的二三事儿&#x2F;">在后厂的二三事儿</a>
+        </li>
+    </ul>
+  </div>
+        </div>
+      </div>
+        <div class="back-to-top animated" role="button" aria-label="返回顶部">
+          <i class="fa fa-arrow-up"></i>
+          <span>0%</span>
+        </div>
+    </div>
+  </aside>
+  <div class="sidebar-dimmer"></div>
+
+
+    </header>
+
+    
+  <div class="reading-progress-bar"></div>
+
+  <a href="https://github.com/wolfbloodzzx" class="github-corner" title="Follow me on GitHub" aria-label="Follow me on GitHub" rel="noopener" target="_blank"><svg width="80" height="80" viewBox="0 0 250 250" aria-hidden="true"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"></path><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor" class="octo-body"></path></svg></a>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+    <div class="main-inner post posts-expand">
+
+
+  
+
+
+<div class="post-block">
+  
+  
+
+  <article itemscope itemtype="http://schema.org/Article" class="post-content" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="http://blog.zevzhang.top/2022/10/10/%E8%81%8A%E8%81%8Ac%E4%B8%AD%E7%9A%84%E7%A7%BB%E5%8A%A8%E8%AF%AD%E4%B9%89/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar_old.jpeg">
+      <meta itemprop="name" content="张子兴">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="小张同学的日常扯淡记录">
+      <meta itemprop="description" content="扯淡为主，瞎掰为辅">
+    </span>
+
+    <span hidden itemprop="post" itemscope itemtype="http://schema.org/CreativeWork">
+      <meta itemprop="name" content="聊聊c++中的移动语义 | 小张同学的日常扯淡记录">
+      <meta itemprop="description" content="">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          聊聊c++中的移动语义
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+
+      <time title="创建时间：2022-10-10 11:19:48" itemprop="dateCreated datePublished" datetime="2022-10-10T11:19:48+08:00">2022-10-10</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/%E7%BC%96%E7%A8%8B/" itemprop="url" rel="index"><span itemprop="name">编程</span></a>
+        </span>
+    </span>
+
+  
+    <span class="post-meta-item" title="阅读次数" id="busuanzi_container_page_pv">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">阅读次数：</span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+  
+  <span class="post-meta-item">
+    
+    <span class="post-meta-item-icon">
+      <i class="far fa-comment"></i>
+    </span>
+    <span class="post-meta-item-text">Valine：</span>
+  
+    <a title="valine" href="/2022/10/10/%E8%81%8A%E8%81%8Ac%E4%B8%AD%E7%9A%84%E7%A7%BB%E5%8A%A8%E8%AF%AD%E4%B9%89/#valine-comments" itemprop="discussionUrl">
+      <span class="post-comments-count valine-comment-count" data-xid="/2022/10/10/%E8%81%8A%E8%81%8Ac%E4%B8%AD%E7%9A%84%E7%A7%BB%E5%8A%A8%E8%AF%AD%E4%B9%89/" itemprop="commentCount"></span>
+    </a>
+  </span>
+  
+  
+    <span class="post-meta-break"></span>
+    <span class="post-meta-item" title="本文字数">
+      <span class="post-meta-item-icon">
+        <i class="far fa-file-word"></i>
+      </span>
+      <span class="post-meta-item-text">本文字数：</span>
+      <span>7.7k</span>
+    </span>
+    <span class="post-meta-item" title="阅读时长">
+      <span class="post-meta-item-icon">
+        <i class="far fa-clock"></i>
+      </span>
+      <span class="post-meta-item-text">阅读时长 &asymp;</span>
+      <span>7 分钟</span>
+    </span>
+</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+        <p><img
+src="http://pic.zevzhang.top/blog/images/2022/10/17/b46dcbc57c2e4cbdca32e35541b19689.jpg"
+title="Photo by Niranjan _ Photograph on Unsplash" /></p>
+<p>c++11中引入的移动语义和std::move函数，是一个非常容易让人疑惑的点。正好最近在开发中遇到了几个std::move使用不当造成的bug，网上关于移动语义的资料很多，正好借着这个机会，按照我的理解好好盘一盘c++11里的移动语义到底做了一件什么事儿。</p>
+<span id="more"></span>
+<h2
+id="所谓的赋值语句到底做了一件什么事儿">所谓的赋值语句，到底做了一件什么事儿</h2>
+<p>想聊明白移动语义，很多资料其实上来就在讲左右值和左右值引用，诚然这两个概念在C++11里通常是绑定在一起来理解的，不过我还是想换个思路，从赋值语句开始来聊聊这件事。为了更容易去理解，我们以下的讨论只针对用户自定义的class和struct，不考虑c++中的基础数据类型。</p>
+<p>我们首先通过几个case来看一下类对象调用赋值语句会发生什么情况。</p>
+<p><strong>case 1：</strong></p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Test</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Test</span>(<span class="type">int</span> value): <span class="built_in">value_</span>(value) &#123;&#125;</span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">value</span><span class="params">()</span> <span class="type">const</span> </span>&#123;<span class="keyword">return</span> value_;&#125;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> value_;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="function">Test <span class="title">a</span><span class="params">(<span class="number">1</span>)</span>, <span class="title">b</span><span class="params">(<span class="number">2</span>)</span></span>;</span><br><span class="line">    a = b;</span><br><span class="line">    std::cout &lt;&lt; t.<span class="built_in">value</span>() &lt;&lt; std::endl;</span><br><span class="line">    std::cout &lt;&lt; a.<span class="built_in">value</span>() &lt;&lt; std::endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这段代码地输出结果很显然，两行都是b的value值2，代码执行的逻辑是符合我们预期的，在执行a
+=
+b的时候，程序将value的值b赋值给了a这个新对象，尽管a与b是两个完全独立的对象，赋值语句将b的值copy给了a。</p>
+<p><strong>case 2：</strong></p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Test</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="built_in">Test</span>(<span class="type">int</span> value): <span class="built_in">value_</span>(value) &#123; data_ = <span class="keyword">new</span> <span class="type">int</span>[value]; &#125;</span><br><span class="line">    ~<span class="built_in">Test</span>() &#123;<span class="keyword">delete</span> data_;&#125;</span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">value</span><span class="params">()</span> <span class="type">const</span> </span>&#123;<span class="keyword">return</span> value_;&#125;</span><br><span class="line">    <span class="function"><span class="type">int</span>* <span class="title">data_ptr</span><span class="params">()</span> </span>&#123;<span class="keyword">return</span> data_;&#125;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> value_;</span><br><span class="line">    <span class="type">int</span>* data_;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="function">Test <span class="title">a</span><span class="params">(<span class="number">1</span>)</span>, <span class="title">b</span><span class="params">(<span class="number">2</span>)</span></span>;</span><br><span class="line">    Test a = b;</span><br><span class="line">    std::cout &lt;&lt; (<span class="type">uint64_t</span>) a.<span class="built_in">data_ptr</span>() &lt;&lt; std::endl;</span><br><span class="line">    std::cout &lt;&lt; (<span class="type">uint64_t</span>) t.<span class="built_in">data_ptr</span>() &lt;&lt; std::endl;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这段代码逻辑也很简单，合理的预期是用户创建Test对象的同时，会申请一块长度为value的内存给这个对象持有。我们试着执行这段函数，首先从打印结果上来看，两行打印出来的对象持有的这块内存地址是相同的，另外不出预料的话，程序会报出一个double
+free的运行时错误，这显然不符合了我们的设计初衷，a和b共同持有了一块相同的内存，任何一个对象对data_的操作都会影响到另外一个对象中持有的data_。</p>
+<p>c++文档在赋值运算符一章里对赋值运算符有这样的定义<a href="#fn1"
+class="footnote-ref" id="fnref1"
+role="doc-noteref"><sup>1</sup></a>:</p>
+<blockquote>
+<p>copy assignment operator replaces the contents of the object a with a
+copy of the contents of b (b is not modified). For class types, this is
+a special member function, described in copy assignment operator.</p>
+</blockquote>
+<p>在case1和case2这种情况里，我们没有重载过赋值运算符，a =
+b其实调用了默认的赋值运算符，a的content会直接repace成b的值。这个逻辑在case1中没有问题，但在case2中这种需要自己管理内存的场景下，指针的值（内存地址）也将作为一个content直接copy到b中，显然不能满足我们的需求。因此为了能让每个对象自己持有内存地址，我们需要重载opertor=，来让c++做一些特定的操作。</p>
+<p><strong>case 3：</strong></p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Test</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="keyword">explicit</span> <span class="title">Test</span><span class="params">(<span class="type">int</span> size)</span>: size_(size) &#123;</span> data_ = <span class="keyword">new</span> <span class="type">int</span>[size_]; &#125;</span><br><span class="line">    ~<span class="built_in">Test</span>() &#123;<span class="keyword">delete</span> data_;&#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">size</span><span class="params">()</span> <span class="type">const</span> </span>&#123;<span class="keyword">return</span> size_;&#125;</span><br><span class="line">    <span class="function"><span class="type">int</span>* <span class="title">data_ptr</span><span class="params">()</span> </span>&#123;<span class="keyword">return</span> data_;&#125;</span><br><span class="line"></span><br><span class="line">    Test &amp;<span class="keyword">operator</span>=(<span class="type">const</span> Test &amp;other) &#123;</span><br><span class="line">        std::cout &lt;&lt; <span class="string">&quot;This is copy= operator&quot;</span> &lt;&lt; std::endl;</span><br><span class="line">        <span class="keyword">if</span> (&amp;other != <span class="keyword">this</span>) &#123;</span><br><span class="line">            <span class="keyword">delete</span>[] data_;</span><br><span class="line">            size_ = other.size_;</span><br><span class="line">            data_ = <span class="keyword">new</span> <span class="type">int</span>[size_];</span><br><span class="line">            std::<span class="built_in">copy</span>(&amp;other.data_[<span class="number">0</span>], &amp;other.data_[<span class="number">0</span>] + size_, &amp;data_[<span class="number">0</span>]);</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> *<span class="keyword">this</span>;</span><br><span class="line">    &#125;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> size_;</span><br><span class="line">    <span class="type">int</span>* data_;</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>我们将Test类增加一个=操作符号的重载函数，再次执行<strong>case
+2</strong>的main函数，此时输出会变成：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">This is copy= operator</span><br><span class="line">94493275451056</span><br><span class="line">94493275451088</span><br></pre></td></tr></table></figure>
+<p>好了，我们看到内存地址已经不同了。</p>
+<p>通过上面的三个case，我们可以总结出两个关于类对象进行赋值运算相关的特性：</p>
+<ul>
+<li>c++中针对赋值运算的实现是通过赋值运算符（operator=）函数来实现的</li>
+<li>c++中提供了默认的赋值运算符（浅拷贝），但是在某些情况下默认赋值运算符满足我们的需求，用户需要自行重载赋值运算符来实现更复杂的功能，例如case
+2和case 3中的内存拷贝（深拷贝）</li>
+</ul>
+<h2 id="拷贝赋值与移动赋值">拷贝赋值与移动赋值</h2>
+<p>其实大部分场景下，通过<strong>case
+3</strong>中类似的操作，即对Test&amp; operator=(const Test&amp;
+other)进行重载，基本上能满足我们日常的开发需求。</p>
+<p>但仔细观察很容易发现，每次调用一次赋值运算符，data_都需要重新申请一块新内存并进行一次内存拷贝，是否所有的场景里都需要申请新的内存呢？</p>
+<p>我们看一下下面的例子：</p>
+<p><strong>case 4</strong></p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Test</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="keyword">explicit</span> <span class="title">Test</span><span class="params">(<span class="type">int</span> size)</span>: size_(size) &#123;</span> data_ = <span class="keyword">new</span> <span class="type">int</span>[size_]; &#125;</span><br><span class="line">    ~<span class="built_in">Test</span>() &#123;</span><br><span class="line">        std::cout &lt;&lt; <span class="string">&quot;~Test&quot;</span> &lt;&lt; std::endl;</span><br><span class="line">        <span class="keyword">delete</span> data_;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">size</span><span class="params">()</span> <span class="type">const</span> </span>&#123;<span class="keyword">return</span> size_;&#125;</span><br><span class="line">    <span class="function"><span class="type">int</span>* <span class="title">data_ptr</span><span class="params">()</span> </span>&#123;<span class="keyword">return</span> data_;&#125;</span><br><span class="line"></span><br><span class="line">    Test &amp;<span class="keyword">operator</span>=(<span class="type">const</span> Test &amp;other) &#123;</span><br><span class="line">        std::cout &lt;&lt; <span class="string">&quot;This is copy= operator&quot;</span> &lt;&lt; std::endl;</span><br><span class="line">        <span class="keyword">if</span> (&amp;other != <span class="keyword">this</span>) &#123;</span><br><span class="line">            <span class="keyword">delete</span>[] data_;</span><br><span class="line">            size_ = other.size_;</span><br><span class="line">            data_ = <span class="keyword">new</span> <span class="type">int</span>[size_];</span><br><span class="line">            std::<span class="built_in">copy</span>(&amp;other.data_[<span class="number">0</span>], &amp;other.data_[<span class="number">0</span>] + size_, &amp;data_[<span class="number">0</span>]);</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> *<span class="keyword">this</span>;</span><br><span class="line">    &#125;</span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> size_;</span><br><span class="line">    <span class="type">int</span>* data_;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="function">Test <span class="title">a</span><span class="params">(<span class="number">1</span>)</span></span>;</span><br><span class="line">    a = <span class="built_in">Test</span>(<span class="number">10</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>上述代码，我们先创建了一个对象a，然后对a通过a =
+Test(10)进行了一次更新。程序输出如下：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">This is copy= <span class="keyword">operator</span></span><br><span class="line">~Test</span><br><span class="line">~Test</span><br></pre></td></tr></table></figure>
+<p>我们观察输出的结果，这里显然进行了一次内存申请和内存拷贝。仔细思考这个过程，Test(10)首先创建了一个临时对象申请了一块内存，在这条赋值语句执行结束了之后，这个临时的对象生命周期就已经结束了，此时临时对象中的数据也销毁了。进一步思考，总之临时变量在这次运行结束后也会被销毁，我们若能直接把这个临时对象中的资源承接过来转移到a中，似乎就可以减少一次内存申请和拷贝，并且对整个程序来说也是安全的。</p>
+<p>于是，关于赋值，貌似出现了两种选择：</p>
+<ol type="1">
+<li>赋值之后原对象需要保留，此时需要将原对象中的值拷贝到新对象（<strong>拷贝语义
+- 拷贝赋值</strong>）</li>
+<li>赋值之后原对象可销毁，此时可以将原对象中的资源转移到新对象并等待原对象销毁（<strong>移动语义
+- 移动赋值</strong>）</li>
+</ol>
+<p>显然，一个operator=的重载已经没办法满足我们的需求，case
+3给出了一个典型的拷贝赋值的实现，显然我们还需要一个移动赋值的实现。要实现这个功能，最重要的是要把上述的两种情况合理表达出来（这涉及到区分原对象是否有保留的价值）。这里c++为了更好地描述类似地情况，引入了<strong>左值和右值</strong>的概念，关于左值右值更详细的描述，可以参考<a
+href="#fn2" class="footnote-ref" id="fnref2"
+role="doc-noteref"><sup>2</sup></a>和<a href="#fn3" class="footnote-ref"
+id="fnref3"
+role="doc-noteref"><sup>3</sup></a>，强烈建议好好读一读。在这里，我们只需要清楚，<strong>在移动语义下，右值才可以在使用完成后直接销毁，承担资源转移的功能</strong>。</p>
+<p>于是，我们可以声明一个Test &amp;operator=(Test
+&amp;&amp;other)函数，来专门处理右值。代码如下： <figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;iostream&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="keyword">class</span> <span class="title class_">Test</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="keyword">explicit</span> <span class="title">Test</span><span class="params">(<span class="type">int</span> size)</span> : size_(size) &#123;</span> data_ = <span class="keyword">new</span> <span class="type">int</span>[size_]; &#125;</span><br><span class="line">    ~<span class="built_in">Test</span>() &#123;</span><br><span class="line">        std::cout &lt;&lt; <span class="string">&quot;~Test&quot;</span> &lt;&lt; std::endl;</span><br><span class="line">        <span class="keyword">delete</span>[] data_;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">size</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> size_; &#125;</span><br><span class="line">    <span class="function"><span class="type">int</span> *<span class="title">data_ptr</span><span class="params">()</span> </span>&#123; <span class="keyword">return</span> data_; &#125;</span><br><span class="line"></span><br><span class="line">    Test &amp;<span class="keyword">operator</span>=(<span class="type">const</span> Test &amp;other) &#123;</span><br><span class="line">        std::cout &lt;&lt; <span class="string">&quot;This is copy= operator&quot;</span> &lt;&lt; std::endl;</span><br><span class="line">        <span class="keyword">if</span> (&amp;other != <span class="keyword">this</span>) &#123;</span><br><span class="line">            <span class="keyword">delete</span>[] data_;</span><br><span class="line">            size_ = other.size_;</span><br><span class="line">            data_ = <span class="keyword">new</span> <span class="type">int</span>[size_];</span><br><span class="line">            std::<span class="built_in">copy</span>(&amp;other.data_[<span class="number">0</span>], &amp;other.data_[<span class="number">0</span>] + size_, &amp;data_[<span class="number">0</span>]);</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> *<span class="keyword">this</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    Test &amp;<span class="keyword">operator</span>=(Test &amp;&amp;other) &#123;</span><br><span class="line">        std::cout &lt;&lt; <span class="string">&quot;This is move= operator&quot;</span> &lt;&lt; std::endl;</span><br><span class="line">        <span class="keyword">if</span> (<span class="keyword">this</span> != &amp;other) &#123;</span><br><span class="line">            <span class="keyword">delete</span>[] data_;</span><br><span class="line">            data_ = other.data_;</span><br><span class="line">            size_ = other.size_;</span><br><span class="line">            other.data_ = <span class="literal">nullptr</span>;</span><br><span class="line">            other.size_ = <span class="number">0</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> *<span class="keyword">this</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> size_;</span><br><span class="line">    <span class="type">int</span> *data_;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="function">Test <span class="title">a</span><span class="params">(<span class="number">1</span>)</span></span>;</span><br><span class="line">    a = <span class="built_in">Test</span>(<span class="number">10</span>);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<p>输出：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">This is move= <span class="keyword">operator</span></span><br><span class="line">~Test</span><br><span class="line">~Test</span><br></pre></td></tr></table></figure>
+<p>运行上述代码，我们可以观察到程序执行了移动赋值，资源在两个对象间进行了转移。</p>
+<h2 id="拷贝构造与移动构造">拷贝构造与移动构造</h2>
+<p>同理，移动语义与拷贝语义的概念，我们也可以拓展到构造函数上，引入拷贝构造与移动构造的概念。例如对于如下代码。</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">Test <span class="title">a</span><span class="params">(<span class="number">1</span>)</span></span>;</span><br><span class="line">Test b = a;</span><br><span class="line">Test c = std::<span class="built_in">move</span>(a);</span><br></pre></td></tr></table></figure>
+<p>Test b = a的实现需要依赖Test(Test&amp;
+test)构造函数实现，类似移动赋值，Test c =
+std::move(a)也需要来专门识别右值的构造函数Test(Test&amp;&amp;
+test)来实现，完整代码如下：</p>
+<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">class</span> <span class="title class_">Test</span> &#123;</span><br><span class="line"><span class="keyword">public</span>:</span><br><span class="line">    <span class="function"><span class="keyword">explicit</span> <span class="title">Test</span><span class="params">(<span class="type">int</span> size)</span> : size_(size) &#123;</span> data_ = <span class="keyword">new</span> <span class="type">int</span>[size_]; &#125;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">Test</span>(Test&amp; test): <span class="built_in">size_</span>(<span class="number">0</span>), <span class="built_in">data_</span>(<span class="literal">nullptr</span>)&#123;</span><br><span class="line">        std::cout &lt;&lt; <span class="string">&quot;copy construct&quot;</span> &lt;&lt; std::endl;</span><br><span class="line">        *<span class="keyword">this</span> = test;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">Test</span>(Test&amp;&amp; test): <span class="built_in">size_</span>(<span class="number">0</span>), <span class="built_in">data_</span>(<span class="literal">nullptr</span>)&#123;</span><br><span class="line">        std::cout &lt;&lt; <span class="string">&quot;move construct&quot;</span> &lt;&lt; std::endl;</span><br><span class="line">        *<span class="keyword">this</span> = test;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    ~<span class="built_in">Test</span>() &#123;</span><br><span class="line">        std::cout &lt;&lt; <span class="string">&quot;~Test&quot;</span> &lt;&lt; std::endl;</span><br><span class="line">        <span class="keyword">delete</span>[] data_;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="function"><span class="type">int</span> <span class="title">size</span><span class="params">()</span> <span class="type">const</span> </span>&#123; <span class="keyword">return</span> size_; &#125;</span><br><span class="line">    <span class="function"><span class="type">int</span> *<span class="title">data_ptr</span><span class="params">()</span> </span>&#123; <span class="keyword">return</span> data_; &#125;</span><br><span class="line"></span><br><span class="line">    Test &amp;<span class="keyword">operator</span>=(<span class="type">const</span> Test &amp;other) &#123;</span><br><span class="line">        std::cout &lt;&lt; <span class="string">&quot;This is copy= operator&quot;</span> &lt;&lt; std::endl;</span><br><span class="line">        <span class="keyword">if</span> (&amp;other != <span class="keyword">this</span>) &#123;</span><br><span class="line">            <span class="keyword">delete</span>[] data_;</span><br><span class="line">            size_ = other.size_;</span><br><span class="line">            data_ = <span class="keyword">new</span> <span class="type">int</span>[size_];</span><br><span class="line">            std::<span class="built_in">copy</span>(&amp;other.data_[<span class="number">0</span>], &amp;other.data_[<span class="number">0</span>] + size_, &amp;data_[<span class="number">0</span>]);</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> *<span class="keyword">this</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    Test &amp;<span class="keyword">operator</span>=(Test &amp;&amp;other) &#123;</span><br><span class="line">        std::cout &lt;&lt; <span class="string">&quot;This is move= operator&quot;</span> &lt;&lt; std::endl;</span><br><span class="line">        <span class="keyword">if</span> (<span class="keyword">this</span> != &amp;other) &#123;</span><br><span class="line">            <span class="keyword">delete</span>[] data_;</span><br><span class="line">            data_ = other.data_;</span><br><span class="line">            size_ = other.size_;</span><br><span class="line">            other.data_ = <span class="literal">nullptr</span>;</span><br><span class="line">            other.size_ = <span class="number">0</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        <span class="keyword">return</span> *<span class="keyword">this</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line"><span class="keyword">private</span>:</span><br><span class="line">    <span class="type">int</span> size_;</span><br><span class="line">    <span class="type">int</span> *data_;</span><br><span class="line">&#125;;</span><br><span class="line"></span><br><span class="line"><span class="function"><span class="type">int</span> <span class="title">main</span><span class="params">()</span> </span>&#123;</span><br><span class="line">    <span class="function">Test <span class="title">a</span><span class="params">(<span class="number">1</span>)</span></span>;</span><br><span class="line">    Test b = a;</span><br><span class="line">    Test c = std::<span class="built_in">move</span>(a);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>有兴趣可以自行执行一下上述代码，在这里就不深入讨论了。关于移动构造和拷贝构造更详细的资料可以查看<a
+href="#fn4" class="footnote-ref" id="fnref4"
+role="doc-noteref"><sup>4</sup></a>、<a href="#fn5" class="footnote-ref"
+id="fnref5" role="doc-noteref"><sup>5</sup></a>、<a href="#fn6"
+class="footnote-ref" id="fnref6" role="doc-noteref"><sup>6</sup></a>和<a
+href="#fn7" class="footnote-ref" id="fnref7"
+role="doc-noteref"><sup>7</sup></a>。</p>
+<h2 id="总结">总结</h2>
+<p>好了，到这里我们可以简单总结一下了：</p>
+<ul>
+<li>移动语义的主要目的就是为了<strong>性能优化</strong>，是为了将一个<strong>即将释放的目标对象</strong>中的资源移动到新对象里，以便<strong>以最小的代价构建新对象</strong>。</li>
+<li>移动语义的相关操作中，被移动的对象在移动后资源已经被移动走，该对象应该被释放或生命周期结束自动释放，<strong>不应有任何后续的操作</strong>。</li>
+<li>c++中的自定义的类原生不支持移动语义，而是通过重载=运算符和构造函数来实现的，其核心的原理是在移动语义中，<strong>被移动的对象必须是右值</strong>，因此可以通过重载参数为右值引用的=运算符和构造函数，代码在编译过程中就可以根据类型推断来判断释放用户要进行移动操作，具体如何移动是根据用户的实现来进行的。</li>
+<li>对于一个类来说，移动语义相关的函数并不是必须的，<strong>在设计类时若没有显式重载移动语义相关的函数，默认是会直接按照拷贝语义相关的操作来进行的</strong>。</li>
+</ul>
+<h2 id="回过头说一嘴stdmove">回过头说一嘴std::move</h2>
+<p>到此，我们回过头来再看一下std::move这个操作。在很多移动语义相关的逻辑里我们都能看到std::move的身影。很多文档中都说std::move实际上没有移动任何东西，只是将左值转换为右值。基于上述的一系列讨论，我们似乎更容易理解std::move存在的意义。在代码里，我们可能有很多需要将左值进行移动的操作，移动语义又是通过右值引用作为参数来推断使用哪个构造或者赋值函数的。在这种情况下，std::move将左值类型转换成了右值，进而触发了移动语义相关的构造或者赋值函数。</p>
+<p>因此，std::move相当于只进行了类型转换，真正移动相关的操作还是通过类内部的移动赋值和移动构造函数来实现的。再进一步，假如某一个类自己本身没重载移动赋值和移动构造函数，尽管在一些场景下调用了std::move，相关操作还是会被默认的拷贝函数承接，不会触发任何移动相关的操作。</p>
+<section id="footnotes" class="footnotes footnotes-end-of-document"
+role="doc-endnotes">
+<hr />
+<ol>
+<li id="fn1"><p><a
+target="_blank" rel="noopener" href="https://en.cppreference.com/w/cpp/language/operator_assignment">Assignment
+operators - cppreference.com</a><a href="#fnref1" class="footnote-back"
+role="doc-backlink">↩︎</a></p></li>
+<li id="fn2"><p><a
+target="_blank" rel="noopener" href="https://en.cppreference.com/w/cpp/language/value_category">Value
+categories - cppreference.com</a><a href="#fnref2" class="footnote-back"
+role="doc-backlink">↩︎</a></p></li>
+<li id="fn3"><p><a
+target="_blank" rel="noopener" href="https://learn.microsoft.com/zh-cn/cpp/cpp/lvalues-and-rvalues-visual-cpp?view=msvc-170">Lvalues
+和 Rvalues (C++)</a><a href="#fnref3" class="footnote-back"
+role="doc-backlink">↩︎</a></p></li>
+<li id="fn4"><p><a
+target="_blank" rel="noopener" href="https://en.cppreference.com/w/cpp/language/move_constructor">Move
+constructors - cppreference.com</a><a href="#fnref4"
+class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn5"><p><a
+target="_blank" rel="noopener" href="https://en.cppreference.com/w/cpp/language/copy_constructor">Copy
+constructors - cppreference.com</a><a href="#fnref5"
+class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn6"><p><a
+target="_blank" rel="noopener" href="https://learn.microsoft.com/zh-cn/cpp/cpp/copy-constructors-and-copy-assignment-operators-cpp?view=msvc-170">复制构造函数和复制赋值运算符
+(C++)</a><a href="#fnref6" class="footnote-back"
+role="doc-backlink">↩︎</a></p></li>
+<li id="fn7"><p><a
+target="_blank" rel="noopener" href="https://learn.microsoft.com/zh-cn/cpp/cpp/move-constructors-and-move-assignment-operators-cpp?view=msvc-170">移动构造函数和移动赋值运算符
+(C++)</a><a href="#fnref7" class="footnote-back"
+role="doc-backlink">↩︎</a></p></li>
+</ol>
+</section>
+
+    </div>
+
+    
+    
+    
+      
+
+
+    <footer class="post-footer">
+          
+
+<div class="post-copyright">
+<ul>
+  <li class="post-copyright-author">
+      <strong>本文作者： </strong>张子兴
+  </li>
+  <li class="post-copyright-link">
+      <strong>本文链接：</strong>
+      <a href="http://blog.zevzhang.top/2022/10/10/%E8%81%8A%E8%81%8Ac%E4%B8%AD%E7%9A%84%E7%A7%BB%E5%8A%A8%E8%AF%AD%E4%B9%89/" title="聊聊c++中的移动语义">http://blog.zevzhang.top/2022/10/10/聊聊c中的移动语义/</a>
+  </li>
+  <li class="post-copyright-license">
+    <strong>版权声明： </strong>本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh" rel="noopener" target="_blank"><i class="fab fa-fw fa-creative-commons"></i>BY-NC-SA</a> 许可协议。转载请注明出处！
+  </li>
+</ul>
+</div>
+
+          <div class="post-tags">
+              <a href="/tags/c/" rel="tag"><i class="fa fa-tag"></i> c++</a>
+              <a href="/tags/%E7%BC%96%E7%A8%8B/" rel="tag"><i class="fa fa-tag"></i> 编程</a>
+          </div>
+
+        
+  <div class="post-widgets">
+    <div class="wpac-rating-container">
+      <div id="wpac-rating"></div>
+    </div>
+  </div>
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/2022/02/20/2021%E5%B9%B4%E9%82%A3%E4%BA%9B%E8%AE%A9%E6%88%91%E5%8D%B0%E8%B1%A1%E6%B7%B1%E5%88%BB%E7%9A%84%E6%92%AD%E5%AE%A2%E8%8A%82%E7%9B%AE%E7%9B%98%E7%82%B9/" rel="prev" title="2021年那些印象深刻的播客节目">
+                  <i class="fa fa-chevron-left"></i> 2021年那些印象深刻的播客节目
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+</div>
+
+
+
+
+
+
+    <div class="comments" id="valine-comments"></div>
+</div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+
+  <div class="beian"><a href="https://beian.miit.gov.cn/" rel="noopener" target="_blank">京ICP备18024312号-1 </a>
+      <img src="/images/beian.png" alt=""><a href="http://www.beian.gov.cn/portal/registerSystemInfo?recordcode=18024312" rel="noopener" target="_blank">京ICP备18024312号 </a>
+  </div>
+
+<div class="copyright">
+  &copy; 2017 – 
+  <span itemprop="copyrightYear">2023</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">张子兴</span>
+</div>
+<div class="wordcount">
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-line"></i>
+    </span>
+      <span>站点总字数：</span>
+    <span title="站点总字数">12k</span>
+  </span>
+  <span class="post-meta-item">
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+      <span>站点阅读时长 &asymp;</span>
+    <span title="站点阅读时长">11 分钟</span>
+  </span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="总访客量">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="总访问量">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div><script color="0,0,255" opacity="0.5" zIndex="-1" count="99" src="https://cdn.jsdelivr.net/npm/canvas-nest.js@1/dist/canvas-nest.js"></script>
+
+    </div>
+  </footer>
+
+  
+  <script size="200" alpha="0.25" zIndex="-10" src="https://cdn.jsdelivr.net/npm/ribbon.js@1.0.2/dist/ribbon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js" integrity="sha256-XL2inqUJaslATFnHdJOi9GfQ60on8Wx1C2H8DYiN1xY=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@3.5.7/dist/jquery.fancybox.min.js" integrity="sha256-yt2kYMy0w8AbtF89WXb2P1rfjcP/HTHLT7097U8Y5b8=" crossorigin="anonymous"></script>
+<script src="/js/comments.js"></script><script src="/js/utils.js"></script><script src="/js/motion.js"></script><script src="/js/schemes/muse.js"></script><script src="/js/next-boot.js"></script>
+
+  
+  <script src="https://embed.widgetpack.com/widget.js" async></script>
+  <script class="next-config" data-name="rating" type="application/json">{"enable":true,"id":29464,"color":"#fc6423"}</script>
+  <script src="/js/third-party/rating.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hexo-generator-searchdb@1.4.0/dist/search.js" integrity="sha256-vXZMYLEqsROAXkEw93GGIvaB2ab+QW6w3+1ahD9nXXA=" crossorigin="anonymous"></script>
+<script src="/js/third-party/search/local-search.js"></script>
+
+
+
+  <script src="/js/third-party/fancybox.js"></script>
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+  
+
+  <script class="next-config" data-name="enableMath" type="application/json">true</script><script class="next-config" data-name="mathjax" type="application/json">{"enable":true,"tags":"none","js":{"url":"https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js","integrity":"sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI="}}</script>
+<script src="/js/third-party/math/mathjax.js"></script>
+
+
+  <script src="https://cdn.jsdelivr.net/npm/quicklink@2.2.0/dist/quicklink.umd.js" integrity="sha256-4kQf9z5ntdQrzsBC3YSHnEz02Z9C1UeW/E9OgnvlzSY=" crossorigin="anonymous"></script>
+  <script class="next-config" data-name="quicklink" type="application/json">{"enable":true,"home":false,"archive":false,"delay":true,"timeout":3000,"priority":true,"ignores":null,"url":"http://blog.zevzhang.top/2022/10/10/%E8%81%8A%E8%81%8Ac%E4%B8%AD%E7%9A%84%E7%A7%BB%E5%8A%A8%E8%AF%AD%E4%B9%89/"}</script>
+  <script src="/js/third-party/quicklink.js"></script>
+
+
+<script class="next-config" data-name="valine" type="application/json">{"enable":true,"appId":"tfiYfw2U0nOMRdjL0rMqzWc9-gzGzoHsz","appKey":"3dbrtRjHNMyouLJahmMOs2EW","serverURLs":"https://leancloudapi.zevzhang.top","placeholder":"聊两句？","avatar":"retro","meta":["nick","mail","link"],"pageSize":10,"lang":null,"visitor":false,"comment_count":true,"recordIP":true,"enableQQ":false,"requiredFields":[],"el":"#valine-comments","path":"/2022/10/10/%E8%81%8A%E8%81%8Ac%E4%B8%AD%E7%9A%84%E7%A7%BB%E5%8A%A8%E8%AF%AD%E4%B9%89/"}</script>
+<script>
+document.addEventListener('page:loaded', () => {
+  NexT.utils.loadComments(CONFIG.valine.el)
+    .then(() => NexT.utils.getScript(
+      'https://fastly.jsdelivr.net/npm/valine@1.4.14/dist/Valine.min.js',
+      { condition: window.Valine }
+    ))
+    .then(() => {
+      new Valine(CONFIG.valine);
+    });
+});
+</script>
+
+</body>
+</html>
